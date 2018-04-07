@@ -19,27 +19,31 @@ import java.util.UUID;
 import static akka.http.javadsl.marshallers.jackson.Jackson.jsonAs;
 import static akka.http.javadsl.model.HttpResponse.create;
 import static akka.http.javadsl.server.RequestVals.entityAs;
+import static akka.http.javadsl.server.values.PathMatchers.rest;
 import static akka.http.javadsl.server.values.PathMatchers.uuid;
 import static akka.http.scaladsl.model.StatusCodes.*;
 
 public class Endpoint extends HttpApp {
-
 
     public static final String HOST_NAME = "localhost";
     public static final int HOST_PORT = 8080;
     public static final String HTTP_PREFIX = "http://";
     public static final String PORT_DELIMITER = ":";
     public static final String FILE_INDEXES = "indexes";
+    public static final String SEARCH = "search";
     private final FileIndexRepository fileIndexes;
+    private final IndexService indexService;
 
     @Inject
-    public Endpoint(FileIndexRepository indexes) {
+    public Endpoint(FileIndexRepository indexes , IndexService indexService) {
         this.fileIndexes = indexes;
+        this.indexService = indexService;
     }
 
     @Override
     public Route createRoute() {
 
+        PathMatcher<String> pathMatcher = rest();
         PathMatcher<UUID> uuidExtractor = uuid();
 
         return handleExceptions(e -> {
@@ -51,6 +55,16 @@ public class Endpoint extends HttpApp {
                         // static page
                         getFromResource("web/index.html")
                 ),
+
+                pathPrefix(SEARCH).route(
+                        get(path(pathMatcher).route(
+                                handleWith(pathMatcher,
+                                        // returns index by id
+                                        (ctx, uuid) -> ctx.completeAs(Jackson.json(), indexService.getIntersectedResults(uuid))
+                                )
+                        ))
+                ),
+
                 pathPrefix(FILE_INDEXES).route(
                         get(pathEndOrSingleSlash().route(
                                 // returns all indexes
@@ -72,7 +86,7 @@ public class Endpoint extends HttpApp {
                                                             .withStatus(Created())
                                                             .addHeader(
                                                                     Location.create(
-                                                                            Uri.create(HTTP_PREFIX + HOST_NAME + PORT_DELIMITER + HOST_PORT + "/"+FILE_INDEXES+"/" + saved.getUuid()))));
+                                                                            Uri.create(HTTP_PREFIX + HOST_NAME + PORT_DELIMITER + HOST_PORT + "/" + FILE_INDEXES + "/" + saved.getUuid()))));
                                         }
                                 )
                         ),
